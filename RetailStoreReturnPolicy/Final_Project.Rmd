@@ -1,0 +1,870 @@
+---
+title: "Final Project"
+author: "Mugdha Potdar, Sapna Nayyar, Xuan Tran, Sonali Yadav"
+date: "11/9/2016"
+output: word_document
+---
+
+```{r}
+getwd()
+#setwd("Desktop/R/project/")
+```
+
+```{r}
+physical_stores <- data.frame(read.csv("question2.csv"))
+physical_stores4 <- data.frame(read.csv("question4.csv"))
+online_stores <- data.frame(read.csv("online_stores.csv"))
+online_returns <- data.frame(read.csv("online_store_return_policy.csv"))
+mydata = read.csv("q5_new_online.csv")
+mydata1 = read.csv("q5_new_physical.csv")
+q6physical <- read.csv("M_Q6_physical.csv")
+q6online  <-  read.csv("M_Q6_online.csv")
+
+
+colnames(physical_stores)[23] <- "Policy_Study_Interaction"
+colnames(physical_stores)[22] <- "Study_Group"
+colnames(physical_stores)[5] <- "Age_Ratio"
+colnames(physical_stores)[8] <- "Household_Income_Ratio"
+colnames(physical_stores)[9] <- "Sales"
+
+colnames(physical_stores4)[24] <- "Policy_Study_Interaction"
+colnames(physical_stores4)[23] <- "Study_Group"
+colnames(physical_stores4)[6] <- "Age_Ratio"
+colnames(physical_stores4)[9] <- "Household_Income_Ratio"
+colnames(physical_stores4)[10] <- "Returns"
+colnames(physical_stores4)[25] <- "Sales"
+
+colnames(online_stores)[16] <- "Policy_Study_Interaction"
+colnames(online_stores)[15] <- "Study_Group"
+colnames(online_stores)[14] <- "Policy_Change"
+colnames(online_stores)[8] <- "Age_Ratio"
+colnames(online_stores)[9] <- "Homeowner_Ratio"
+colnames(online_stores)[11] <- "Household_Income_Ratio"
+
+colnames(online_returns)[17] <- "Policy_Study_Interaction"
+colnames(online_returns)[13] <- "Study_Group"
+colnames(online_returns)[5] <- "Age_Ratio"
+colnames(online_returns)[7] <- "Homeowner_Ratio"
+colnames(online_returns)[9] <- "Household_Income_Ratio"
+
+colnames(mydata)[21] <- "Customer_Purchase"
+colnames(mydata)[24] <- "Study_Group"
+colnames(mydata)[27] <- "Age"
+colnames(mydata)[28] <- "Income_Group"
+
+colnames(mydata1)[21] <- "Customer_Purchase"
+colnames(mydata1)[24] <- "Study_Group"
+colnames(mydata1)[33] <- "Policy_Study_Interaction"
+colnames(mydata1)[27] <- "Age"
+colnames(mydata1)[28] <- "Income_Group"
+
+q6physical$Policy_Study_Interaction = q6physical$Policy_Change*q6physical$Treatment
+colnames(q6physical)[14] <- "Policy_Study_Interaction"
+colnames(q6physical)[12] <- "Study_Group"
+colnames(q6physical)[3] <- "Sales"
+colnames(q6physical)[13] <- "Returns"
+colnames(q6physical)[5] <- "Age"
+colnames(q6physical)[8] <- "Homeowner"
+colnames(q6physical)[6] <- "Income_group"
+
+q6online$PC.Treatment = q6online$Policy_Change*q6online$Treatment
+colnames(q6online)[14] <- "Policy_Study_Interaction"
+colnames(q6online)[12] <- "Study_Group"
+colnames(q6online)[3] <- "Sales"
+colnames(q6online)[13] <- "Returns"
+colnames(q6online)[5] <- "Age"
+colnames(q6online)[8] <- "Homeowner"
+colnames(q6online)[6] <- "Income_group"
+
+physical_stores$year <- ifelse(physical_stores$month=='JAN',2014,ifelse(physical_stores$month=='FEB',2014,ifelse(physical_stores$month=='MAR',2014,2013)))
+```
+
+##Stepwise Regression
+```{r}
+# Stepwise Regression
+library(MASS)
+log_model <- lm(log(Sales)~month+store_number+policy_change+Study_Group+Policy_Study_Interaction+year+gender_ratio+Age_Ratio+homeowner_ratio+child_ratio+Household_Income_Ratio+sales_quantity+store_average_price+store_number_of_skus+sa_gender+sa_full_time+sa_avg_years_of_exp+sa_married+sa_avg_rate_of_pay+sa_dependent+Brand_number+sales_volume_group, data = physical_stores)
+step <- stepAIC(log_model, direction="both")
+step$anova # display results
+```
+
+# Sales Value and Sales Volume
+
+```{r}
+
+library(ggplot2)
+library(sandwich)
+library(msm)
+library(foreign)
+library(MASS)
+library(lmtest)
+library(usdm)
+#install.packages("QuantPsyc")
+library(QuantPsyc)
+#install.packages("effects")
+library(effects)
+
+boxplot(log(online_stores$monthly_sales)~online_stores$Policy_Change)
+boxplot(log(online_stores$monthly_sales)~online_stores$Policy_Study_Interaction)
+sales_value_treatment_effect <- lm(log(monthly_sales)~Policy_Change*Study_Group, data = online_stores)
+plot(effect(term="Policy_Change:Study_Group",mod=sales_value_treatment_effect,default.levels=2),multiline=TRUE) 
+
+sales <- lm(log(monthly_sales)~Policy_Change+Study_Group+Policy_Study_Interaction+Homeowner_Ratio+Household_Income_Ratio+log(store_number_of_skus)+log(store_average_price), data = online_stores)
+summary(sales) # Final Model
+#The store monthly sales should get affected by the total SKUs available online for the customers o shop from. Also, the income ratio (the average income group the customer belongs to) and the homeowener ratio (the proportion of homeowners among customers) tells us how affluent the customer is. Hence, important to the model. The average store price tells us the average monthly sales that the store experiences and is vital factor in determining the future sales.
+
+predicted_model <- predict(sales)
+residuals = resid(sales)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(sales) # Goldfeld-Quandt test ----- p-value = 0.8947 (Not signifiant | No Heteroscedasticity)
+
+bptest(sales) # Breusch-Pagan test ----- p-value = 0.06453 (Not signifiant | No Heteroscedasticity)
+
+residual=resid(sales)
+plot(log(online_stores$store_number_of_skus),residual, ylab="Residuals", xlab="Number of SKUs")
+plot(log(online_stores$store_average_price),residual, ylab="Residuals", xlab="Store Mean Price")
+plot(log(online_stores$Homeowner_Ratio),residual, ylab="Residuals", xlab="Ratio of home owners")
+#plot(log(online_stores$Household_Income_ratio),residual, ylab="Residuals", xlab="Income Range Band")
+qqnorm(residual)
+qqline(residual,col=1)
+
+#multi_coll_df1 <- data.frame(online_stores$Age_Ratio, online_stores$Homeowner_Ratio, online_stores$child_ratio, online_stores$Household_Income_ratio, online_stores$store_number_of_skus)
+
+multi_coll_df2 <- data.frame(online_stores$Age_Ratio, online_stores$Homeowner_Ratio, online_stores$child_ratio, online_stores$Household_Income_Ratio, online_stores$store_number_of_skus)
+
+cor(multi_coll_df2)
+vif(multi_coll_df2)
+
+cor(online_stores$gender_ratio, online_stores$Study_Group)
+cor(online_stores$monthly_sales, log(online_stores$store_number_of_skus))
+
+monthfactor <- factor(online_returns$month, levels = c("OCT","JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","NOV","DEC"))
+
+sales_volume <- glm.nb(monthly_volume~Policy_Change+Study_Group+Policy_Study_Interaction+Homeowner_Ratio+Household_Income_Ratio+store_number_of_skus+store_average_price+monthly_sales, data = online_stores) 
+summary(sales_volume)
+
+with(sales_volume, null.deviance - deviance)
+with(sales_volume, df.null - df.residual)
+with(sales_volume, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) # Model fits the data because LR test statistics (1498.81) is  significant.
+
+sales_volume_p <- glm(monthly_volume~Policy_Change+Study_Group+Policy_Study_Interaction+gender_ratio+Age_Ratio+Homeowner_Ratio+Household_Income_Ratio+store_number_of_skus+store_average_price+monthly_sales, data = online_stores, family = "poisson") # Expected results for the interaction for our hypothesis
+summary(sales_volume_p)
+
+X2 <- 2 * (logLik(sales_volume) - logLik(sales_volume_p))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE) # Significant p-value and large Chi-square value suggests negative binomial
+
+(conf_int <- cbind(Estimate = coef(sales_volume), confint(sales_volume)))
+
+predicted_modelv1 <- predict(sales_volume)
+residuals_v1 = resid(sales_volume)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+model_t0 <- glm.nb(monthly_volume~Policy_Change+Study_Group+Policy_Study_Interaction+Homeowner_Ratio+Household_Income_Ratio+store_number_of_skus+store_average_price+monthly_sales, data = online_stores)
+gqtest(model_t0) # Goldfeld-Quandt test ----- p-value = 0.7801 (Not signifiant | No Heteroscedasticity)
+
+bptest(sales_volume) # Breusch-Pagan test ----- p-value = 0.07981 (Not signifiant | No Heteroscedasticity)
+
+```
+
+#Physical Store Sales and Sales Volume
+
+##Models
+```{r}
+## Non-Transformed Model
+model1 <- lm(Sales~policy_change+Study_Group +Policy_Study_Interaction +gender_ratio +child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month ,data = physical_stores)
+summary(model1)
+ ```
+
+## Log-Transformed Model - Final Model
+```{r}
+
+log_model8 <- lm(log(Sales) ~ policy_change+Study_Group +Policy_Study_Interaction +gender_ratio +child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month ,data = physical_stores)
+summary(log_model8)
+```
+
+##Tests
+```{r}
+# Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+
+library(usdm) 
+
+df <- data.frame(physical_stores$policy_change,physical_stores$gender_ratio, physical_stores$child_ratio,physical_stores$Household_Income_Ratio , physical_stores$store_number_of_skus, physical_stores$store_average_price,  physical_stores$sa_married,  physical_stores$sa_dependent, physical_stores$sales_volume_group ) 
+
+cor(df)
+vif(df)
+
+
+# Heteroscedasticity
+library(lmtest)
+predicted_model <- predict(log_model8)
+residuals = resid(log_model8)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(log_model8) # Goldfeld-Quandt test ----- p-value = 1
+
+bptest(log_model8) # Breusch-Pagan test ----- p-value < 2.2e-16 (THERE IS HET. BAD NEWS)
+
+
+#to remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors. We use these standard errors because we initially found heteroscedasticity in our model.
+coeftest(log_model8, vcov = vcovHC(log_model8, "HC1")) 
+
+
+#Serial Correlation
+
+#install.packages("DataCombine")
+#install.packages("FinTS")
+library(DataCombine)
+library(FinTS)
+# Durbin-Watson test
+#DW = 1.818, p-value = 0.7603
+#alternative hypothesis: true autocorrelation is greater than 0
+dwtest(log_model8) 
+
+# Lagrange Multiplier Test
+#ARCH LM-test; Null hypothesis: no ARCH effects
+#data:  physical_stores$log_model_final
+#Chi-squared = 4332.2, df = 1, p-value < 2.2e-16
+
+log_model <- log(physical_stores$Sales)
+physical_stores$log_model_final <- log_model
+ArchTest(physical_stores$log_model_final, lag=1) 
+
+#indicates positive serial correlation
+
+
+ # Newey-West Standard errors
+
+#coefficient remains the same, P-value increases changing significance level from significant to somewhat significant. Therefore, we use Newey-West Standard errors. 
+
+coeftest(log_model8,vcov.=NeweyWest)
+
+#install.packages("nlme")
+library(nlme)
+#GLS estimators
+log_model_gls <- gls(log_model_final ~ policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group , correlation = corAR1(form=~1), data=physical_stores, na.action = "na.omit")
+print(summary(log_model_gls))
+
+
+#poisson 
+require(sandwich)
+require(msm)
+
+poisson1 <- glm(sales_quantity ~ policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month , family = "poisson",data = physical_stores)
+summary(poisson1)
+
+with(poisson1, null.deviance - deviance)
+with(poisson1, df.null - df.residual)
+with(poisson1, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+#negative binomial: Significant p-value and large Chi-square value suggests negative binomial. Negative binomial also confirms that interaction term is negative and significant. Results match :)
+
+library(foreign)
+library(MASS)
+summary(negbin1 <- glm.nb(sales_quantity ~ policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month ,data = physical_stores))
+
+with(negbin1, null.deviance - deviance)
+with(negbin1, df.null - df.residual)
+with(negbin1, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+X2 <- 2 * (logLik(negbin1) - logLik(poisson1))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE)# Significant p-value and large Chi-square value suggests negative binomial
+
+(est <- cbind(Estimate = coef(negbin1), confint(negbin1))) 
+exp(est)
+```
+
+## Return Value and Return Volume
+
+```{r}
+
+library(ggplot2)
+library(sandwich)
+library(msm)
+library(foreign)
+library(MASS)
+library(lmtest)
+library(usdm)
+library(QuantPsyc)
+library(effects)
+
+
+returns <- lm(log(return_amount)~Policy_Change+Study_Group+Policy_Study_Interaction+log(store_number_of_skus)+log(Sales_Price), data = online_returns)
+summary(returns)
+
+lm.beta(returns)
+
+gqtest(returns) # Goldfeld-Quandt test | Significant p-value | Heteroscedasticity is present
+
+bptest(returns) # Breusch-Pagan test | Non-significant p-value | No Heteroscedasticity is present
+
+model_treatment_effect <- lm(log(return_amount)~Policy_Change*Study_Group, data = online_returns)
+summary(model_treatment_effect)
+plot(effect(term="Policy_Change:Study_Group",mod=model_treatment_effect,default.levels=2),multiline=TRUE) 
+
+model_r0 <- lm(log(return_amount)~Policy_Change*Study_Group, data = online_returns)
+summary(model_r0) # Significant intraction in case no control variables are considered which is not a practical case in the real world
+plot(effect(term="Policy_Change:Study_Group",mod=model_r0,default.levels=2),multiline=TRUE) 
+
+interaction.plot(online_returns$Study_Group, online_returns$Policy_Change, log(online_returns$return_amount), col=13:14)
+interaction.plot(online_returns$Policy_Change, online_returns$Study_Group, log(online_returns$return_amount), col=13:14)
+
+monthfactor <- factor(online_returns$month, levels = c("OCT","JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","NOV","DEC")) # Changes the base category to month Oct
+
+returns_volume <- glm.nb(return_quantity~Policy_Change+Study_Group+Policy_Study_Interaction+Gender_Ratio+Age_Ratio+Homeowner_Ratio+Household_Income_Ratio+store_number_of_skus+return_amount, data = online_returns) # Final Model
+summary(returns_volume)
+
+with(returns_volume, null.deviance - deviance)
+with(returns_volume, df.null - df.residual)
+with(returns_volume, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) # Model fits the data because LR test statistics (1976.031) is  significant.
+
+returns_volume_p <- glm(return_quantity~Policy_Change+Study_Group+Policy_Study_Interaction+Gender_Ratio+Age_Ratio+Homeowner_Ratio+Household_Income_Ratio+store_number_of_skus+return_amount, data = online_returns, family = "poisson") # Expected results for the interaction for our hypothesis
+summary(returns_volume_p)
+
+X2 <- 2 * (logLik(returns_volume) - logLik(returns_volume_p))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE) # Significant p-value and large Chi-square value suggests negative binomial
+
+(conf_int <- cbind(Estimate = coef(returns_volume), confint(returns_volume)))
+
+predicted_modelrv1 <- predict(returns_volume)
+residuals_rv1 = resid(returns_volume)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+
+model_t1 <- glm.nb(return_quantity~Policy_Change+Study_Group+Policy_Study_Interaction+Gender_Ratio+Age_Ratio+Homeowner_Ratio+Child_Ratio+Household_Income_Ratio+store_number_of_skus+return_amount, data = online_returns)
+
+
+gqtest(model_t1) # Goldfeld-Quandt test ----- p-value = 0.99 (Not signifiant | No Heteroscedasticity)
+#Goldfeld-Quandt test id not working with too many breakpoints due to the factor variable(month)
+
+bptest(returns_volume) # Breusch-Pagan test ----- p-value = 0.2409 (Not signifiant | No Heteroscedasticity)
+
+```
+
+
+#Physical Stores Returns and Returns Quantity
+```{r}
+## Non-Transformed Model
+return_model <- lm(Returns ~  policy_change + Study_Group + Policy_Study_Interaction + gender_ratio +child_ratio + Household_Income_Ratio + store_average_price  + sales_volume_group + sa_married + sa_dependent + month + Sales , data = physical_stores4)
+summary(return_model)
+
+## Log-Transformed Model - Final Model
+return_log_model <- lm(log(Returns) ~ policy_change + Study_Group + Policy_Study_Interaction + gender_ratio +child_ratio + Household_Income_Ratio + store_average_price  + sales_volume_group + sa_married + sa_dependent + month + Sales , data = physical_stores4)
+summary(return_log_model)
+```
+
+#Tests
+```{r}
+# Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+
+library(usdm)
+
+df <- data.frame(physical_stores$policy_change,physical_stores$gender_ratio, physical_stores$child_ratio,physical_stores$Household_Income_Ratio, physical_stores$store_average_price,  physical_stores$sa_married,  physical_stores$sa_dependent, physical_stores$sales_volume_group, physical_stores$Sales) 
+
+cor(df)
+vif(df)
+
+
+# Heteroscedasticity
+
+library(lmtest)
+
+predicted_model <- predict(return_log_model)
+residuals = resid(return_log_model)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(return_log_model) # Goldfeld-Quandt test ----- p-value = 1
+
+bptest(return_log_model) # Breusch-Pagan test ----- p-value < 2.2e-16 (THERE IS HET. BAD NEWS)
+
+
+#to remedy heteroscasticity  --- interaction still negative and significant 
+
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(return_log_model, vcov = vcovHC(return_log_model, "HC1")) 
+
+
+#Serial Correlation
+
+#install.packages("DataCombine")
+#install.packages("FinTS")
+library(DataCombine)
+library(FinTS)
+# Durbin-Watson test
+dwtest(return_log_model) 
+# Lagrange Multiplier Test
+
+rlog_model <- log(physical_stores4$Returns)
+physical_stores4$return_log_model_final <- rlog_model
+ArchTest(physical_stores4$return_log_model_final, lag=1) 
+
+#indicates positive serial correlation
+
+
+# Newey-West Standard errors
+
+#coefficient remains the same, P-value does not change significance level 
+coeftest(return_log_model,vcov.=NeweyWest)
+
+#install.packages("nlme")
+library(nlme)
+#GLS estimators
+return_log_model_gls <- gls(return_log_model_final ~ policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group+  Sales , correlation = corAR1(form=~1), data=physical_stores4, na.action = "na.omit")
+print(summary(return_log_model_gls))
+
+
+#poisson 
+require(sandwich)
+require(msm)
+
+poisson2 <- glm(returns_quantity ~ policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month + Sales, family = "poisson",data = physical_stores4)
+summary(poisson2)
+
+with(poisson2, null.deviance - deviance)
+with(poisson2, df.null - df.residual)
+with(poisson2, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+#negative binomial: Significant p-value and large Chi-square value suggests negative binomial. Negative binomial also confirms that interaction term is negative and significant. Results match :)
+
+library(foreign)
+library(MASS)
+summary(negbin2 <- glm.nb(returns_quantity ~policy_change*Study_Group +gender_ratio+child_ratio+Household_Income_Ratio+store_average_price+store_number_of_skus + sa_married +sa_dependent+ sales_volume_group + month + Sales ,data = physical_stores4))
+
+with(negbin2, null.deviance - deviance)
+with(negbin2, df.null - df.residual)
+with(negbin2, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+X2 <- 2 * (logLik(negbin2) - logLik(poisson2))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE)
+
+
+(est <- cbind(Estimate = coef(negbin2), confint(negbin2)))
+
+exp(est)
+```
+
+#Customer Behavior Online Sales
+## ONLINE SALES
+```{r}
+
+#Model
+library(MASS)
+
+online_sales = lm(log(Customer_Purchase)~Policy_Change+Study_Group+Policy_Change*Study_Group+factor(gender)+Age+Income_Group+factor(homeowner_code)+length_of_residence+factor(child), data = mydata)
+summary(online_sales)
+
+
+```
+
+#Tests
+
+```{r}
+
+## Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+library(usdm) 
+
+df <- data.frame(mydata$Policy_Change,mydata$Study_Group,mydata$YES_CHILD, mydata$R_HOME,mydata$Male,mydata$Age,mydata$Income_Group,mydata$length_of_residence) 
+
+cor(df)
+vif(df)
+
+# Test Heteroscedasticity
+library(lmtest)
+
+
+predicted_model <- predict(online_sales)
+residuals = resid(online_sales)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(online_sales) # Goldfeld-Quandt test ----- p-value = 0.89 => No heteroscedasticity
+
+bptest(online_sales) # Breusch-Pagan test ----- p-value < 2.2e-16 => Heteroscedasticity exists ==> Need to remedy it by using robust standard errors.
+
+
+
+##to remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(online_sales, vcov = vcovHC(online_sales, "HC1")) 
+
+##Serial Correlation
+# Serial Correlation is believed not to be an issue due to the dataset's structure.
+
+##Poisson Online Quantity
+#install.packages("msm")
+library(msm)
+summary(poisson_online <- glm(Sales_Quantity~Policy_Change+Study_Group+Policy_Change*Study_Group+factor(gender)+Age+Income_Group+factor(homeowner_code)+length_of_residence+factor(child), family="poisson", data=mydata))
+
+with(poisson_online , null.deviance - deviance)
+with(poisson_online , df.null - df.residual)
+with(poisson_online , pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+#The model fit statistic is significant => model does not fit the data.
+
+## Negative binomial
+library(foreign)
+library(MASS)
+summary(negbin_online <- glm.nb(Sales_Quantity~Policy_Change+Study_Group+Policy_Change*Study_Group+factor(gender)+Age+Income_Group+factor(homeowner_code)+length_of_residence+factor(child), data = mydata)) 
+with(negbin_online , null.deviance - deviance)
+with(negbin_online , df.null - df.residual)
+with(negbin_online , pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+#The model fit statistic is significant => model fits the data.
+
+X2 <- 2 * (logLik(negbin_online) - logLik(poisson_online))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE)
+#This very large and significant chi-square strongly suggests the negative binomial model is more appropriate than the poisson model. It also indicates the data is overdispersed.
+
+
+# Test Heteroscedasticity
+library(lmtest)
+
+gqtest(negbin_online) # Goldfeld-Quandt test ----- p-value = 0.9594 => No Heteroscedasticity 
+
+bptest(negbin_online) # Breusch-Pagan test ----- p-value =1.801e-10 => Heteroscedasticity exists ==> Need to remedy it by using robust standard errors.
+
+
+##To remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(negbin_online, vcov = vcovHC(negbin_online, "HC1")) 
+
+##Serial Correlation
+library(DataCombine)
+library(FinTS)
+# Durbin-Watson test
+dwtest(negbin_online)
+#Serial Correlation exists ==> Need to remedy it by using Newey-West Standard errors.
+
+#install.packages("nlme")
+library(nlme)
+
+library(lmtest)
+coeftest(negbin_online, vcov.=NeweyWest) # Newey-West Standard errors.
+
+#The results are consistent with that of the model for customer_purchase in dollar amount.
+```
+
+#Customer Behavior Physical Sales
+##PHYSICAL SALES
+```{r}
+
+#model
+library(MASS)
+gender <- factor(mydata1$gender, levels = c("F","M"))
+child <- factor(mydata1$child)
+physical_sales = lm(log(Customer_Purchase)~Policy_Change+Study_Group+Policy_Change*Study_Group+gender+Age+Income_Group+length_of_residence+child, data = mydata1)
+summary(physical_sales)
+
+head(mydata)
+
+```
+
+#Tests
+
+```{r}
+## Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+library(usdm) 
+
+df <- data.frame(mydata1$Policy_Change,mydata1$Study_Group,mydata1$YES_CHILD,mydata1$Male,mydata1$Age,mydata1$Income_Group,mydata1$length_of_residence) 
+
+cor(df)
+vif(df)
+#Both VIF scores (all VIFs are less than 3) and the correlation matrix indicate that there is no multicollinearity in this dataset.
+
+
+# Test Heteroscedasticity
+library(lmtest)
+
+
+predicted_model <- predict(physical_sales)
+residuals = resid(physical_sales)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(physical_sales) # Goldfeld-Quandt test ----- p-value = 0.9668 => No heteroscedasticity
+
+bptest(physical_sales) # Breusch-Pagan test ----- p-value < 2.2e-16 => Heteroscedasticity exists ==> Need to remedy it by using robust standard errors.
+
+
+
+##To remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(physical_sales, vcov = vcovHC(physical_sales, "HC1")) 
+
+##Serial Correlation
+# Serial Correlation is believed not to be an issue due to the dataset's structure.
+
+
+##Poisson physical Quantity
+#install.packages("msm")
+library(msm)
+summary(poisson_physical <- glm(Sales_Quantity~Policy_Change+Study_Group+Policy_Change*Study_Group+factor(gender)+Age+Income_Group+length_of_residence+factor(child), family="poisson", data=mydata1))
+
+with(poisson_physical , null.deviance - deviance)
+with(poisson_physical , df.null - df.residual)
+with(poisson_physical , pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+#p-value of test is 0, which indicates poisson is not a good model.
+
+
+
+## Negative binomial
+library(foreign)
+library(MASS)
+summary(negbin_physical <- glm.nb(Sales_Quantity~Policy_Change+Study_Group+Policy_Change*Study_Group+factor(gender)+Age+Income_Group+length_of_residence+factor(child), data = mydata1)) 
+
+with(negbin_physical , null.deviance - deviance)
+with(negbin_physical , df.null - df.residual)
+with(negbin_physical , pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+#The model fit statistic is significant => model fits the data.
+
+
+X2 <- 2 * (logLik(negbin_physical) - logLik(poisson_physical))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE)
+#This very large and significant chi-square strongly suggests the negative binomial model is more appropriate than the poisson model. It also indicates the data is overdispersed.
+
+
+# Test Heteroscedasticity
+library(lmtest)
+
+gqtest(negbin_physical) # Goldfeld-Quandt test ----- p-value = < 2.2e-16 => Heteroscedasticity exists ==> Need to remedy it by using robust standard errors.
+
+bptest(negbin_physical) # Breusch-Pagan test ----- p-value < 2.2e-16 => Heteroscedasticity exists ==> Need to remedy it by using robust standard errors.
+
+
+##To remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(negbin_physical, vcov = vcovHC(negbin_physical, "HC1")) 
+
+
+
+##Serial Correlation
+library(DataCombine)
+library(FinTS)
+# Durbin-Watson test
+dwtest(negbin_physical)
+#Serial Correlation exists ==> Need to remedy it by using Newey-West Standard errors.
+
+#install.packages("nlme")
+library(nlme)
+
+library(lmtest)
+coeftest(negbin_physical, vcov.=NeweyWest) # Newey-West Standard errors.
+
+#The results are consistent with that of the model for customer_purchase in dollar amount.
+```
+
+#Customer Behavior Physical Returns
+##PHYSICAL RETURNS
+```{r}
+## Description of Data
+head(q6physical) # check rows of data
+summary(q6physical) # descriptive statistics
+sapply(q6physical, sd) # standard deviation
+xtabs(~ Policy_Change + Policy_Study_Interaction, data = q6physical) # two-way contingency table of categorical outcome and predictors. We want to make sure there are not 0 cells
+
+
+## Linear probability model
+lm_physical<- lm(Returns~Sales+Policy_Change+Study_Group+Policy_Study_Interaction+Age+Income_group+factor(gender)+length_of_residence + factor(child), data=q6physical)
+
+summary(lm_physical)
+predictedprobability_lm_p<-predict(lm_physical) # let's look at the predicted probability of Returns for each observation in the data 
+range(predictedprobability_lm_p) # Range of the predicted probability tells us there are aren't any negative probabilities of Returns. Therefore, linear probability model may be the right model but using Probit model for analysis
+
+
+## Probit_Physical
+#install.packages("aod")
+library(aod)
+#install.packages("ggplot2")
+library(ggplot2)
+
+q6physical$gender <- factor(q6physical$gender)
+q6physical$child <- factor(q6physical$child)
+ # let's first define all categorical variables as factor variables
+
+
+
+## FINAL MODEL
+probit_physical<- glm(Returns~Sales+Policy_Change+Study_Group+Policy_Study_Interaction+Age+Income_group+gender+length_of_residence+child,data=q6physical,family=binomial(link="probit")) # This is the command to run a probit regression 
+summary(probit_physical) # For every one unit change in Sales, the z-score increases by 1.391e-04. 
+```
+
+## Tests
+```{r}
+#install.packages("aod")
+library(aod)
+library(ggplot2)
+library(Rcpp)
+
+# CHECKING MODEL FIT
+
+with(probit_physical, null.deviance - deviance)
+with(probit_physical, df.null - df.residual)
+with(probit_physical, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) #The output produced by summary(probit_physical) included indices of fit (shown below the coefficients), including the null and deviance residuals and the AIC. To find the difference in deviance for the two models (i.e., the test statistic) we can use the with command.The chi-square of 2577.987 with 9 degrees of freedom and an associated p-value of 0 does tell us that our model as a whole fits significantly better than an empty model.
+
+
+### ONLINE MARGINAL EFFECTS
+
+#install.packages("mfx")
+library(mfx)
+
+probitmfx(formula=Returns~Sales+Policy_Study_Interaction+Study_Group+Age+Income_group+factor(gender)+length_of_residence + factor(child), data=q6physical) # We can generate the marginal effects with this command. The one unit increase in Sales increases the probability of Returns by 2.9625e-05, holding other variables at their means
+
+probitmfx(formula=Returns~Sales+Policy_Study_Interaction+Study_Group+Age+Income_group+factor(gender)+length_of_residence + factor(child), data=q6physical, robust=TRUE) # We can obtain the marginal effects from a probit that uses robust standard errors. Note that marginal effects do not change, however, std. errors, and therefore, p-values change.
+
+anova(probit_physical, test="Chisq") # This generates the analysis of deviance table. We can see the impact of including a variable on improving model fit using the "analysis of deviance table". In this example, all variables improve the model fit except child.\
+
+
+## Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+library(usdm) 
+q6physical$gender2 <- ifelse(q6physical$gender == "Male",1,0)
+ q6physical$child2 <- ifelse(q6physical$child== "Yes",1,0)
+onlinedf <- data.frame(q6physical$Policy_Study_Interaction,q6physical$Policy_Change,q6physical$Study_Group,q6physical$Age,q6physical$Income_group, q6physical$gender2,q6physical$length_of_residence,q6physical$child2 )
+cor(onlinedf)
+vif(onlinedf)
+#Policy Change AND Policy_Study_Interaction IS highly correlated
+
+
+#Heteroscedasticity
+
+library(lmtest)
+predicted_model <- predict(probit_physical)
+residuals = resid(probit_physical)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+
+gqtest(probit_physical) # Goldfeld-Quandt test ----- p-value = 0.0002478
+
+bptest(probit_physical) # Breusch-Pagan test ----- p-value < 2.2e-16 (THERE IS HET. BAD NEWS)
+
+
+##to remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(probit_physical, vcov = vcovHC(probit_physical, "HC1")) 
+
+##Serial Correlation
+# Serial Correlation is believed not to be an issue due to the dataset's structure.
+```
+
+#Customer Behavior Online Returns
+##ONLINE RETURNS
+```{r}
+## Description of the data
+head(q6online) # check rows of data
+summary(q6online) # descriptive statistics
+sapply(q6online, sd) # standard deviation
+xtabs(~ Policy_Change + Policy_Study_Interaction, data = q6online) # two-way contingency table of categorical outcome and predictors. We want to make sure there are not 0 cells
+
+## Linear probability model
+first_trial<- lm(Returns~Sales+Policy_Study_Interaction+Study_Group+Policy_Change+Age+Income_group+factor(gender)+factor(ethnic_code)+factor(Homeowner)+length_of_residence + factor(child), data=q6online)
+
+summary(first_trial)
+predictedprobability_lm<-predict(first_trial) # let's look at the predicted probability of return for each observation in the data 
+range(predictedprobability_lm) # Range of the predicted probability tells us there negative probabilities of return. Therefore, linear probability model is not the right model hence using Probit model for the analysis. 
+
+
+## Probit_Online
+#install.packages("aod")
+library(aod)
+#install.packages("ggplot2")
+library(ggplot2)
+q6online$Homeowner <- factor(q6online$Homeowner)
+q6online$gender <- factor(q6online$gender)
+q6online$child <- factor(q6online$child)
+q6online$ethnic_code <- factor(q6online$ethnic_code) # let's first define all categorical variables as factor variables
+head(q6online)
+
+
+##FINAL MODEL
+probit_online<- glm(Returns~Sales+Policy_Change+Study_Group+Policy_Study_Interaction+Age+Income_group+gender+length_of_residence + child,data=q6online,family=binomial(link="probit")) # This is the command to run a probit regression 
+summary(probit_online) 
+```
+## Tests
+```{r}
+#install.packages("aod")
+library(aod)
+library(ggplot2)
+library(Rcpp)
+
+# CHECKING MODEL FIT
+with(probit_online, null.deviance - deviance)
+with(probit_online, df.null - df.residual)
+with(probit_online, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) #The output produced by summary(probit_online) included indices of fit (shown below the coefficients), including the null and deviance residuals and the AIC. To find the difference in deviance for the two models (i.e., the test statistic) we can use the with command.The chi-square of 824.8816 with 9 degrees of freedom and an associated p-value of 9.355279e-172 does tell us that our model as a whole fits significantly better than an empty model.
+
+
+### ONLINE MARGINAL EFFECTS
+#install.packages("mfx")
+library(mfx)
+probitmfx(formula=Returns~Sales+Policy_Study_Interaction+Study_Group+Age+Income_group+factor(gender)+length_of_residence + factor(child), data=q6online) # We can generate the marginal effects with this command. The one unit increase in Sales increases the probability of Returns by 8.7111e-05, holding other variables at their means
+
+probitmfx(formula=Returns~Sales+Policy_Study_Interaction+Study_Group+Age+Income_group+factor(gender)+length_of_residence + factor(child), data=q6online, robust=TRUE) # We can obtain the marginal effects from a probit that uses robust standard errors. Note that marginal effects do not change, however, std. errors, and therefore, p-values change.
+
+
+anova(probit_online, test="Chisq") # This generates the analysis of deviance table. We can see the impact of including a variable on improving model fit using the "analysis of deviance table". In this example, all variables improve the model fit except Policy_Change and Policy_Study_Interaction but they have to be included in the model to do our analysis.\
+
+
+## Multicollinearity - All correlations less than 80% and VIFs less than 3. No multicollinearity. 
+library(usdm) 
+q6online$gender2 <- ifelse(q6online$gender == "Male",1,0)
+ q6online$child2 <- ifelse(q6online$child== "Yes",1,0)
+onlinedf <- data.frame(q6online$Policy_Study_Interaction,q6online$Policy_Change,q6online$Study_Group,q6online$Age,q6online$Income_group, q6online$gender2,q6online$length_of_residence,q6online$child2 )
+cor(onlinedf)
+vif(onlinedf)
+#Policy Change AND Policy_Study_Interaction IS highly correlated
+
+
+# Heteroscedasticity
+library(lmtest)
+
+
+predicted_model <- predict(probit_online)
+residuals = resid(probit_online)
+plot(predicted_model, residuals, ylab = "Residuals", xlab = "Fitted Values")
+gqtest(probit_online) # Goldfeld-Quandt test ----- p-value = 0.9967
+bptest(probit_online) # Breusch-Pagan test ----- p-value < 2.2e-16 (THERE IS HET. BAD NEWS)
+
+
+##to remedy heteroscasticity
+library(sandwich)
+library(foreign)
+library(lmtest)
+library(multiwayvcov)
+# Obtaining Huber-White robust standard errors.
+coeftest(probit_online, vcov = vcovHC(probit_online, "HC1")) 
+
+
+##Serial Correlation
+# Serial Correlation is believed not to be an issue due to the dataset's structure.
+```
+
